@@ -178,6 +178,7 @@ except ImportError:
 # SAMODEJNA IZBIRA PREDLOGE POGODBE (mapa templates/ ob app.py)
 # --------------------------------------------------------------------------
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+ASSETS_DIR = Path(__file__).parent / "assets"
 
 TEMPLATE_1_MOSKI = ("1_lastnik_moski.docx", "1 lastnik (moški)")
 TEMPLATE_1_ZENSKA = ("1_lastnik_zenska.docx", "1 lastnica (ženska)")
@@ -268,7 +269,7 @@ def _activate_template(file_bytes: bytes, file_id: str) -> None:
 # --------------------------------------------------------------------------
 # LOGOTIP PODJETJA (zgornji desni kot)
 # --------------------------------------------------------------------------
-LOGO_PATH = Path(__file__).parent / "assets" / ""
+LOGO_PATH = Path(__file__).parent / "assets" / "logo.png"
 
 def _load_logo_b64() -> str | None:
     try:
@@ -353,7 +354,7 @@ def _save_provider_credentials_to_env(provider: str, api_key: str, base_url: str
 # --------------------------------------------------------------------------
 st.set_page_config(
     page_title="e-Služnost",
-    page_icon="assets/logo.png",
+    page_icon=str(ASSETS_DIR / "logo.png") if (ASSETS_DIR / "logo.png").exists() else "🏛️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -489,7 +490,11 @@ if _LOGO_B64:
     )
 
 st.title("")
-st.image("assets/naslovna.png", width=3000)
+_naslovna_path = ASSETS_DIR / "naslovna.png"
+if _naslovna_path.exists():
+    st.image(str(_naslovna_path), width=3000)
+else:
+    st.warning(f"Manjka slika '{_naslovna_path.name}' v mapi 'assets/' - preverite, da je bila poslana na GitHub (glej .gitattributes/binarne datoteke).")
 
 st.caption(
     "Aplikacija je namenjena izključno za interno uporabo v podjetju Elektro Maribor d.d. in je zaščitena z avtorskimi pravicami. Vsebine, pridobljene z uporabo aplikacije, so zaupne in se ne smejo deliti ali objavljati zunaj podjetja brez ustreznega dovoljenja."
