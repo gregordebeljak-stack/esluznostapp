@@ -1,0 +1,27 @@
+# Skrivnosti - NIKOLI ne nalagajte v Git
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+env/
+*.egg-info/
+
+# Build artefakti
+build/
+dist/
+*.spec.bak
+
+# OS / urejevalniki
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Začasne / izhodne datoteke aplikacije
+*.tmp
+tmp_*/
