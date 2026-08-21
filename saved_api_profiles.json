@@ -1,6 +1,7 @@
 {
   "integrate.api.nvidia.com": {
-    "base_url": "https://integrate.api.nvidia.com/v1",
-    "model": "minimaxai/minimax-m3"
+    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "model": "models/gemini-3.1-flash-lite"
+    "provider": "gemini"
   }
 }
