@@ -1133,27 +1133,15 @@ with tab_ezk:
                         f"({len(pdf_bytes) / 1024:.0f} KB)."
                     )
                 else:
-                    import tkinter as tk
-                    from tkinter import filedialog
-                    
-                    root = tk.Tk()
-                    root.withdraw()
-                    root.wm_attributes('-topmost', 1)
-                    
-                    saved_path = filedialog.asksaveasfilename(
-                        initialfile=file_name,
-                        defaultextension=".pdf",
-                        filetypes=[("PDF datoteke", "*.pdf")],
-                        title="Shrani izpisek kot..."
+                    # Opomba: aplikacija teče na strežniku (Streamlit Cloud), zato
+                    # ne moremo odpreti lokalnega "Shrani kot..." okna (tkinter)
+                    # na strežniku - to povzroči ImportError (_tkinter). Namesto
+                    # tega uporabnik datoteko prenese prek gumba spodaj
+                    # (st.download_button), ki sproži prenos v brskalniku.
+                    st.success(
+                        f"✅ Izpisek pripravljen ({len(pdf_bytes) / 1024:.0f} KB). "
+                        f"Prenesite ga z gumbom spodaj."
                     )
-                    root.destroy()
-                    
-                    if saved_path:
-                        with open(saved_path, "wb") as f:
-                            f.write(pdf_bytes)
-                        st.success(f"✅ Izpisek uspešno prenesen in shranjen:\n`{saved_path}`")
-                    else:
-                        st.warning("Prenos preklican.")
             except EzkError as e:
                 st.error(str(e))
             except Exception as e:
@@ -1952,22 +1940,24 @@ with tab_fill:
             
             preview_rendered = False
             
-            # Najprej poskusi najboljši (PDF) predogled preko LibreOffice
+            # Najprej poskusi najboljši predogled preko LibreOffice - dokument
+            # pretvorimo v slike strani (JPEG) namesto vdelanega PDF-ja, ker
+            # brskalniki (in Streamlit Cloud) pogosto blokirajo prikaz PDF-ja
+            # prek <iframe src="data:application/pdf;base64,...">. Slike se
+            # prikažejo vedno zanesljivo.
             if preview_engine.is_available():
                 try:
-                    with st.spinner("Pripravljam natančen PDF predogled..."):
+                    with st.spinner("Pripravljam natančen predogled (LibreOffice)..."):
                         current_docx_bytes = save_docx(st.session_state.doc)
-                        pdf_bytes = preview_engine.docx_to_pdf_bytes(current_docx_bytes)
-                        pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
-                        
-                        st.markdown(
-                            f'<iframe src="data:application/pdf;base64,{pdf_b64}#toolbar=0&navpanes=0" '
-                            f'width="100%" height="800px" style="border: 1px solid var(--border-gray); border-radius: 8px;"></iframe>', 
-                            unsafe_allow_html=True
-                        )
+                        page_images = preview_engine.docx_to_page_images(current_docx_bytes)
+                    if page_images:
+                        for i, img_bytes in enumerate(page_images, start=1):
+                            st.image(img_bytes, use_container_width=True, caption=f"Stran {i}/{len(page_images)}")
                         preview_rendered = True
+                    else:
+                        st.warning("LibreOffice ni vrnil nobene strani predogleda.")
                 except Exception as e:
-                    st.error(f"Napaka pri pripravi PDF predogleda: {e}")
+                    st.error(f"Napaka pri pripravi predogleda: {e}")
             
             # Če PDF metoda ni uspela ali ni podprta, uporabi poenostavljen mammoth
             if not preview_rendered:
@@ -2060,29 +2050,21 @@ with tab_fill:
                     if orig_color:
                         run.font.color.rgb = orig_color
             
-                # Prikaži samo gumb za shranjevanje preko poljubne mape
-                if st.button("💾 SHRANI POGODBO", type="primary", use_container_width=True):
-                    import tkinter as tk
-                    from tkinter import filedialog
-                    
-                    root = tk.Tk()
-                    root.withdraw()
-                    root.wm_attributes('-topmost', 1)
-                    
-                    saved_path = filedialog.asksaveasfilename(
-                        initialfile=build_export_filename(),
-                        defaultextension=".docx",
-                        filetypes=[("Word dokument", "*.docx")],
-                        title="Shrani izpolnjeno pogodbo kot..."
-                    )
-                    root.destroy()
-                    
-                    if saved_path:
-                        with open(saved_path, "wb") as f:
-                            f.write(export_bytes)
-                        st.success(f"✅ Pogodba uspešno shranjena:\n`{saved_path}`")
-                    else:
-                        st.warning("Shranjevanje preklicano.")
+                # Gumb za prenos izpolnjene pogodbe. Aplikacija teče na
+                # strežniku (npr. Streamlit Cloud), zato lokalno okno
+                # "Shrani kot..." (tkinter) tam ne deluje - strežnik nima
+                # zaslona, kar povzroči ImportError (_tkinter). st.download_button
+                # namesto tega sproži prenos datoteke v uporabnikov brskalnik,
+                # ki datoteko shrani na njegov računalnik (deluje enako lokalno
+                # in v oblaku).
+                st.download_button(
+                    "💾 SHRANI POGODBO",
+                    data=export_bytes,
+                    file_name=build_export_filename(),
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    type="primary",
+                    use_container_width=True,
+                )
 
 with tab_bulk:
     st.subheader("Naložite PDF izpiske iz zemljiške knjige")

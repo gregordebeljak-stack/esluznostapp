@@ -75,6 +75,41 @@ def docx_to_pdf_bytes(docx_bytes: bytes) -> bytes:
         return pdf_path.read_bytes()
 
 
+def docx_to_page_images(docx_bytes: bytes, dpi: int = 130) -> List[bytes]:
+    """Pretvori .docx v seznam JPEG slik (bytes), po eno na stran - prek
+    LibreOffice (soffice) + poppler (pdftoppm). Namenjeno predogledu v
+    brskalniku (st.image), ker nekateri brskalniki/Streamlit Cloud okolja
+    blokirajo prikaz PDF neposredno prek
+    <iframe src="data:application/pdf;base64,...">."""
+    if not is_available():
+        raise RuntimeError(
+            "LibreOffice ali poppler-utils (pdftoppm) nista nameščena na tem sistemu. "
+            "Namestite ju za predogled dokumenta (glej README)."
+        )
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        docx_path = workdir / "preview.docx"
+        docx_path.write_bytes(docx_bytes)
+
+        result = subprocess.run(
+            ["soffice", "--headless", "--convert-to", "pdf", "--outdir", str(workdir), str(docx_path)],
+            capture_output=True, text=True, timeout=90,
+        )
+        pdf_path = workdir / "preview.pdf"
+        if not pdf_path.exists():
+            raise RuntimeError(f"Pretvorba v PDF ni uspela: {result.stderr or result.stdout}")
+
+        img_prefix = workdir / "preview_page"
+        subprocess.run(
+            ["pdftoppm", "-jpeg", "-r", str(dpi), str(pdf_path), str(img_prefix)],
+            capture_output=True, text=True, timeout=60, check=True,
+        )
+        images = sorted(workdir.glob("preview_page-*.jpg"))
+        if not images:
+            images = sorted(workdir.glob("preview_page*.jpg"))
+        return [p.read_bytes() for p in images]
+
+
 def build_side_by_side_comparison(
     original_docx_bytes: bytes,
     final_docx_bytes: bytes,
