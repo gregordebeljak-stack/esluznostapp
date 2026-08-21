@@ -430,12 +430,12 @@ st.markdown(
     .stTabs [data-baseweb="tab"]:nth-child(3) {
         margin-left: auto;
     }
-    .stTabs [data-baseweb="tab"]:nth-child(2) {
+    .stTabs [data-baseweb="tab"]:first-child {
         font-size: 1.34rem !important;
         padding-left: 30px;
         padding-right: 30px;
     }
-    .stTabs [data-baseweb="tab"]:first-child {
+    .stTabs [data-baseweb="tab"]:nth-child(2) {
         min-width: unset;
     }
     .em-logo {
@@ -469,8 +469,8 @@ st.markdown(
 
 if _LOGO_B64:
     st.markdown(
-        f'<img id="logo-img" src="data:image/jpeg;base64,{_LOGO_B64}" '
-        f'class="logo" alt="Elektro Maribor d.d.">',
+        f'<img id="em-logo-img" src="data:image/jpeg;base64,{_LOGO_B64}" '
+        f'class="em-logo" alt="Elektro Maribor d.d.">',
         unsafe_allow_html=True,
     )
     components.html(
@@ -509,6 +509,7 @@ ezk_defaults = {
     "ezk_storage_state": None,
     "ezk_last_pdf": None,
     "ezk_debug_mode": False,
+    "ezk_guest_mode": False,
 }
 for k, v in ezk_defaults.items():
     if k not in st.session_state:
@@ -568,6 +569,7 @@ if not st.session_state.ezk_logged_in:
             st.session_state.ezk_logged_in = True
             st.session_state.ezk_username = "Gost (brez prijave)"
             st.session_state.ezk_storage_state = None
+            st.session_state.ezk_guest_mode = True
             st.rerun()
         # -----------------------------------------------
         components.html(
@@ -618,6 +620,7 @@ if not st.session_state.ezk_logged_in:
                     st.session_state.ezk_username = username
                     st.session_state.ezk_storage_state = state
                     st.session_state.ezk_logged_in = True
+                    st.session_state.ezk_guest_mode = False
                     
                     # ---- NOVO: Ohranjanje seje pri življenju v ozadju ----
                     def keep_alive_worker(state, max_minutes=30, interval_minutes=9):
@@ -974,9 +977,9 @@ TAB_FILL_LABEL = "📝 IZPOLNJEVANJE POGODBE"
 TAB_BULK_LABEL = f"📊 PREGLED LASTNIKOV PARCEL IZ ZEMLJIŠKE KNJIGE"
 TAB_SETTINGS_LABEL = "⚙️ NASTAVITVE"
 
-tab_ezk, tab_projekt, tab_bulk, tab_fill, tab_settings = st.tabs([
-    TAB_EZK_LABEL,
+tab_projekt, tab_ezk, tab_bulk, tab_fill, tab_settings = st.tabs([
     TAB_PROJEKT_LABEL,
+    TAB_EZK_LABEL,
     TAB_BULK_LABEL,
     TAB_FILL_LABEL,
     TAB_SETTINGS_LABEL,
@@ -1048,277 +1051,287 @@ with tab_ezk:
             st.session_state.ezk_logged_in = False
             st.session_state.ezk_username = ""
             st.session_state.ezk_storage_state = None
+            st.session_state.ezk_guest_mode = False
             st.rerun()
 
-    st.markdown("**03-001 - Redni izpis iz zemljiške knjige**")
-    with st.container(border=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            st.selectbox(
-                "Način vnosa nepremičnin:", options=["po ID znaku"], disabled=True,
-            )
-        with c2:
-            st.selectbox(
-                "Tip nepremičnine:", options=["zemljiška parcela"], disabled=True,
-            )
-        st.markdown(
-            '<div class="field-caption">✏️ Vpišite šifro katastrske občine in parcelno '
-            'številko spodaj (ime KO se izpiše sproti).</div>',
-            unsafe_allow_html=True,
-        )
+    ezk_guest_mode = st.session_state.get("ezk_guest_mode", False)
 
-        k1, k2 = st.columns(2)
-        with k1:
-            ezk_katastrska_obcina = st.text_input("Katastrska občina (šifra)", key="ezk_katastrska_obcina")
-            if ezk_katastrska_obcina:
-                st.markdown(f"📍 **Mesto:** {get_ko_name(ezk_katastrska_obcina)}")
-
-        with k2:
-            ezk_parcelna_stevilka = st.text_input("Parcelna številka", key="ezk_parcelna_stevilka")
-
-        st.session_state.ezk_debug_mode = st.checkbox(
-            "🐞 Debug način (prikaži brskalnik med iskanjem)",
-            value=st.session_state.ezk_debug_mode,
-        )
-
-        ezk_submit_disabled = not (
-            ezk_katastrska_obcina.strip() and ezk_parcelna_stevilka.strip()
-        )
-        
-        btn_col1, btn_col2 = st.columns(2)
-        with btn_col1:
-            btn_main = st.button(
-                "📄 Prikaži v pdf obliki (dodaj v pregled)", type="primary", use_container_width=True,
-                disabled=ezk_submit_disabled, key="ezk_submit"
-            )
-        with btn_col2:
-            btn_direct = st.button(
-                "📥 Samo prenesi PDF", type="secondary", use_container_width=True,
-                disabled=ezk_submit_disabled, key="ezk_submit_direct"
-            )
-
-        st.link_button(
-            "🔗 Odpri iskalnik eSodstvo neposredno",
-            EZK_SEARCH_URL,
-            use_container_width=True,
-            help="Odpre uradni iskalnik javnih izpisov eSodstva v novem zavihku brskalnika - "
-                 "za ročno iskanje (npr. po imenu katastrske občine), namesto samodejnega iskanja zgoraj.",
-        )
-
-        if btn_main or btn_direct:
-            try:
-                with st.spinner("Iskanje izpiska v eSodstvu ... (lahko traja nekaj sekund)"):
-                    pdf_bytes = cached_fetch_ezk_pdf(
-                        _state=st.session_state.ezk_storage_state,
-                        katastrska_obcina=ezk_katastrska_obcina.strip(),
-                        parcelna_stevilka=ezk_parcelna_stevilka.strip(),
-                        headless=not st.session_state.ezk_debug_mode,
-                    )
-                file_name = f"ezk_{ezk_katastrska_obcina.strip()}_{ezk_parcelna_stevilka.strip()}.pdf"
-                file_name = _safe_filename_part(file_name.replace(".pdf", "")) + ".pdf"
-                st.session_state.ezk_last_pdf = (file_name, pdf_bytes)
-
-                if btn_main:
-                    file_id = f"{file_name}_{len(pdf_bytes)}"
-                    existing_ids = {r["file_id"] for r in st.session_state.bulk_pdf_records}
-                    if file_id not in existing_ids:
-                        if len(st.session_state.bulk_pdf_records) < MAX_BULK_PDFS:
-                            st.session_state.bulk_pdf_records.append(
-                                {"file_id": file_id, "name": file_name, "text": extract_pdf_text(pdf_bytes)}
-                            )
-                        else:
-                            st.warning(f"Zavihek '{TAB_BULK_LABEL}' je že poln.")
-                    st.success(
-                        f"Izpisek uspešno pridobljen in dodan v '{TAB_BULK_LABEL}' "
-                        f"({len(pdf_bytes) / 1024:.0f} KB)."
-                    )
-                else:
-                    # Opomba: aplikacija teče na strežniku (Streamlit Cloud), zato
-                    # ne moremo odpreti lokalnega "Shrani kot..." okna (tkinter)
-                    # na strežniku - to povzroči ImportError (_tkinter). Namesto
-                    # tega uporabnik datoteko prenese prek gumba spodaj
-                    # (st.download_button), ki sproži prenos v brskalniku.
-                    st.success(
-                        f"✅ Izpisek pripravljen ({len(pdf_bytes) / 1024:.0f} KB). "
-                        f"Prenesite ga z gumbom spodaj."
-                    )
-            except EzkError as e:
-                st.error(str(e))
-            except Exception as e:
-                st.error(f"Nepričakovana napaka med pridobivanjem izpiska: {e}")
-
-    if st.session_state.ezk_last_pdf:
-        fname, fbytes = st.session_state.ezk_last_pdf
-        st.download_button(
-            "⬇️ Prenesi zadnji izpisek (.pdf)", data=fbytes, file_name=fname,
-            mime="application/pdf", use_container_width=True,
-        )
-     # --------------------------------------------------------------------------
-    # SAMODEJNO SERIJSKO ISKANJE (EXCEL + PDF + SLIKA)
-    # --------------------------------------------------------------------------
-    st.divider()
-    st.subheader("📑 Serijsko iskanje iz seznama (Excel / PDF / Slika)")
-    st.caption(
-        "Naložite datoteko s seznamom parcel. Sistem jo bo analiziral in "
-        "samodejno pridobil vse izpiske iz eSodstva v zavihek za pregled lastnikov."
+    st.link_button(
+        "🔗 Odpri iskalnik eSodstvo neposredno",
+        EZK_SEARCH_URL,
+        use_container_width=True,
+        help="Odpre uradni iskalnik javnih izpisov eSodstva v novem zavihku brskalnika - "
+             "za ročno iskanje (npr. po imenu katastrske občine).",
     )
 
-    batch_upload = st.file_uploader(
-        "Naloži datoteko (.xlsm, .xlsx, .xls, .pdf, .png, .jpg, .jpeg)", 
-        type=["xlsm", "xlsx", "xls", "pdf", "png", "jpg", "jpeg"],
-        key="batch_uploader"
-    )
+    if ezk_guest_mode:
+        st.info(
+            "Iskalnik javnih izpisov iz zemljiške knjige in serijsko iskanje iz seznama "
+            "sta na voljo samo prijavljenim uporabnikom (SI-PASS). V gostujočem načinu "
+            "lahko izpiske poiščete ročno prek zgornje povezave."
+        )
+    else:
+        st.markdown("**03-001 - Redni izpis iz zemljiške knjige**")
+        with st.container(border=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.selectbox(
+                    "Način vnosa nepremičnin:", options=["po ID znaku"], disabled=True,
+                )
+            with c2:
+                st.selectbox(
+                    "Tip nepremičnine:", options=["zemljiška parcela"], disabled=True,
+                )
+            st.markdown(
+                '<div class="field-caption">✏️ Vpišite šifro katastrske občine in parcelno '
+                'številko spodaj (ime KO se izpiše sproti).</div>',
+                unsafe_allow_html=True,
+            )
 
-    if batch_upload:
-        parcels_to_fetch = []
+            k1, k2 = st.columns(2)
+            with k1:
+                ezk_katastrska_obcina = st.text_input("Katastrska občina (šifra)", key="ezk_katastrska_obcina")
+                if ezk_katastrska_obcina:
+                    st.markdown(f"📍 **Mesto:** {get_ko_name(ezk_katastrska_obcina)}")
 
-        # 1. OBNAVA IN BRANJE EXCEL DATOTEKE (.xlsm, .xlsx, .xls)
-        if batch_upload.name.lower().endswith(('.xlsm', '.xlsx', '.xls')):
-            try:
-                df = pd.read_excel(batch_upload, engine='openpyxl') 
-                st.markdown("**Predogled prebranih stolpcev:**")
-                st.dataframe(df.head(3))
+            with k2:
+                ezk_parcelna_stevilka = st.text_input("Parcelna številka", key="ezk_parcelna_stevilka")
 
-                st.markdown("**1. Povežite stolpce z ustreznimi podatki:**")
-                c1, c2 = st.columns(2)
-                with c1:
-                    ko_col = st.selectbox("Kateri stolpec vsebuje šifro Katastrske občine?", options=["-- Izberi --"] + list(df.columns))
-                with c2:
-                    parc_col = st.selectbox("Kateri stolpec vsebuje Parcelno številko?", options=["-- Izberi --"] + list(df.columns))
+            st.session_state.ezk_debug_mode = st.checkbox(
+                "🐞 Debug način (prikaži brskalnik med iskanjem)",
+                value=st.session_state.ezk_debug_mode,
+            )
 
-                if ko_col != "-- Izberi --" and parc_col != "-- Izberi --":
-                    for _, row in df.iterrows():
-                        k_val = str(row[ko_col]).strip()
-                        p_val = str(row[parc_col]).strip()
-                        
-                        if k_val and p_val and k_val.lower() != 'nan' and p_val.lower() != 'nan':
-                            if k_val.endswith('.0'): k_val = k_val[:-2]
-                            if p_val.endswith('.0'): p_val = p_val[:-2]
-                            parcels_to_fetch.append((k_val, p_val))
-                            
-            except Exception as e:
-                st.error(f"Napaka pri obdelavi Excel datoteke: {e}")
+            ezk_submit_disabled = not (
+                ezk_katastrska_obcina.strip() and ezk_parcelna_stevilka.strip()
+            )
+            
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                btn_main = st.button(
+                    "📄 Prikaži v pdf obliki (dodaj v pregled)", type="primary", use_container_width=True,
+                    disabled=ezk_submit_disabled, key="ezk_submit"
+                )
+            with btn_col2:
+                btn_direct = st.button(
+                    "📥 Samo prenesi PDF", type="secondary", use_container_width=True,
+                    disabled=ezk_submit_disabled, key="ezk_submit_direct"
+                )
 
-        # 2. OBNAVA IN BRANJE PDF DATOTEKE
-        elif batch_upload.name.lower().endswith('.pdf'):
-            try:
-                with st.spinner("Berem in prepoznavam parcele iz PDF datoteke..."):
-                    pdf_text = extract_pdf_text(batch_upload.read())
-                    detected_pairs = parse_ko_parcels_from_text(pdf_text)
-                    
-                    if detected_pairs:
-                        st.success(f"V PDF datoteki sem uspel prepoznati {len(detected_pairs)} parcelnih vnosov!")
-                    else:
-                        st.warning("V PDF datoteki nisem uspel prepoznati nobenih parcel.")
-
-                    # NOVO: urejljiva tabela - dopolnite/popravite ročno, če je treba
-                    df_detected = pd.DataFrame(detected_pairs, columns=["Šifra KO", "Parcelna številka"])
-                    df_edited = st.data_editor(
-                        df_detected, num_rows="dynamic", use_container_width=True,
-                        key="batch_pdf_editor",
-                    )
-                    parcels_to_fetch = [
-                        (str(r["Šifra KO"]).strip(), str(r["Parcelna številka"]).strip())
-                        for _, r in df_edited.iterrows()
-                        if str(r["Šifra KO"]).strip() and str(r["Parcelna številka"]).strip()
-                    ]
-            except Exception as e:
-                st.error(f"Napaka pri branju PDF datoteke: {e}")
-
-       # 3. OBNAVA IN BRANJE SLIKE (.png, .jpg, .jpeg)
-        elif batch_upload.name.lower().endswith(('.png', '.jpg', '.jpeg')):
-            try:
-                with st.spinner("Berem in prepoznavam besedilo na sliki (OCR)..."):
-                    import pytesseract
-                    from PIL import Image, ImageOps
-
-                    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-                    
-                    img = Image.open(batch_upload)
-
-                    # NOVO: predobdelava slike izboljša prepoznavo znakov pri fotografijah
-                    # s telefona (siva lestvica, avtomatski kontrast, povečava manjših slik).
-                    proc_img = ImageOps.grayscale(img)
-                    proc_img = ImageOps.autocontrast(proc_img, cutoff=1)
-                    pw, ph = proc_img.size
-                    if max(pw, ph) < 3000:
-                        proc_img = proc_img.resize((int(pw * 1.8), int(ph * 1.8)), Image.LANCZOS)
-
-                    # KLJUČNO: dodan config='--psm 6' prisili bralnik, da ne meša stolpcev in bere strogo po vrsticah!
-                    image_text = pytesseract.image_to_string(proc_img, lang='slv+eng', config='--psm 6')
-                    
-                    # Uporabimo izboljšano funkcijo za iskanje KO in parcel
-                    detected_pairs = parse_ko_parcels_from_text(image_text)
-                    
-                    if detected_pairs:
-                        st.success(f"Na sliki sem uspel prepoznati {len(detected_pairs)} parcelnih vnosov!")
-                    else:
-                        st.warning("Na sliki nisem uspel prepoznati nobenih parcel. Poskusite s sliko v višji ločljivosti in preverite, da so podatki čitljivi.")
-
-                    # NOVO: tabela je zdaj UREJLJIVA - OCR ni nikoli 100% zanesljiv (npr. zabrisane
-                    # ali obledele vrstice), zato lahko tukaj ročno popravite/dodate/izbrišete vrstico,
-                    # preden zaženete prenos. Primerjajte s sliko in dopolnite manjkajoče vnose.
-                    df_detected = pd.DataFrame(detected_pairs, columns=["Šifra KO", "Parcelna številka"])
-                    df_edited = st.data_editor(
-                        df_detected, num_rows="dynamic", use_container_width=True,
-                        key="batch_image_editor",
-                    )
-                    parcels_to_fetch = [
-                        (str(r["Šifra KO"]).strip(), str(r["Parcelna številka"]).strip())
-                        for _, r in df_edited.iterrows()
-                        if str(r["Šifra KO"]).strip() and str(r["Parcelna številka"]).strip()
-                    ]
-            except ImportError:
-                st.error("Za branje iz slike manjkata knjižnici `pytesseract` in `Pillow`. Namestite ju preko terminala s: `pip install pytesseract pillow`.")
-            except pytesseract.TesseractNotFoundError:
-                st.error("Na sistemu ni nameščen Tesseract OCR. Namestite ga na sistem preden poskusite prebrati sliko.")
-            except Exception as e:
-                st.error(f"Napaka pri branju slike: {e}")
-
-        # ZAGON MASOVNEGA PRENOSA V ZEMLJIŠKI KNJIGI
-        if parcels_to_fetch:
-            unique_parcels = list(dict.fromkeys(parcels_to_fetch))
-
-            st.markdown("**2. Potrditev:**")
-            if st.button(f"▶️ ZAŽENI PRENOS ZA {len(unique_parcels)} PARCEL", type="primary", use_container_width=True):
-                progress_bar = st.progress(0.0)
-                status_text = st.empty()
-                success_count = 0
-                
-                for i, (k_val, p_val) in enumerate(unique_parcels):
-                    status_text.text(f"Prenašam ({i+1}/{len(unique_parcels)}): KO {k_val}, Parc. št. {p_val} ...")
-                    try:
+            if btn_main or btn_direct:
+                try:
+                    with st.spinner("Iskanje izpiska v eSodstvu ... (lahko traja nekaj sekund)"):
                         pdf_bytes = cached_fetch_ezk_pdf(
                             _state=st.session_state.ezk_storage_state,
-                            katastrska_obcina=k_val,
-                            parcelna_stevilka=p_val,
+                            katastrska_obcina=ezk_katastrska_obcina.strip(),
+                            parcelna_stevilka=ezk_parcelna_stevilka.strip(),
                             headless=not st.session_state.ezk_debug_mode,
                         )
-                        
-                        file_name = f"ezk_{k_val}_{p_val}.pdf"
-                        file_name = _safe_filename_part(file_name.replace(".pdf", "")) + ".pdf"
+                    file_name = f"ezk_{ezk_katastrska_obcina.strip()}_{ezk_parcelna_stevilka.strip()}.pdf"
+                    file_name = _safe_filename_part(file_name.replace(".pdf", "")) + ".pdf"
+                    st.session_state.ezk_last_pdf = (file_name, pdf_bytes)
+
+                    if btn_main:
                         file_id = f"{file_name}_{len(pdf_bytes)}"
-                        
                         existing_ids = {r["file_id"] for r in st.session_state.bulk_pdf_records}
-                        
                         if file_id not in existing_ids:
                             if len(st.session_state.bulk_pdf_records) < MAX_BULK_PDFS:
                                 st.session_state.bulk_pdf_records.append(
                                     {"file_id": file_id, "name": file_name, "text": extract_pdf_text(pdf_bytes)}
                                 )
-                                success_count += 1
                             else:
-                                st.warning(f"Dosežen je maksimum {MAX_BULK_PDFS} hkrati naloženih izpiskov!")
-                                break
-                    except Exception as e:
-                        st.error(f"Napaka pri prenosu (KO: {k_val}, Parc: {p_val}): {e}")
+                                st.warning(f"Zavihek '{TAB_BULK_LABEL}' je že poln.")
+                        st.success(
+                            f"Izpisek uspešno pridobljen in dodan v '{TAB_BULK_LABEL}' "
+                            f"({len(pdf_bytes) / 1024:.0f} KB)."
+                        )
+                    else:
+                        # Opomba: aplikacija teče na strežniku (Streamlit Cloud), zato
+                        # ne moremo odpreti lokalnega "Shrani kot..." okna (tkinter)
+                        # na strežniku - to povzroči ImportError (_tkinter). Namesto
+                        # tega uporabnik datoteko prenese prek gumba spodaj
+                        # (st.download_button), ki sproži prenos v brskalniku.
+                        st.success(
+                            f"✅ Izpisek pripravljen ({len(pdf_bytes) / 1024:.0f} KB). "
+                            f"Prenesite ga z gumbom spodaj."
+                        )
+                except EzkError as e:
+                    st.error(str(e))
+                except Exception as e:
+                    st.error(f"Nepričakovana napaka med pridobivanjem izpiska: {e}")
+
+        if st.session_state.ezk_last_pdf:
+            fname, fbytes = st.session_state.ezk_last_pdf
+            st.download_button(
+                "⬇️ Prenesi zadnji izpisek (.pdf)", data=fbytes, file_name=fname,
+                mime="application/pdf", use_container_width=True,
+            )
+         # --------------------------------------------------------------------------
+        # SAMODEJNO SERIJSKO ISKANJE (EXCEL + PDF + SLIKA)
+        # --------------------------------------------------------------------------
+        st.divider()
+        st.subheader("📑 Serijsko iskanje iz seznama (Excel / PDF / Slika)")
+        st.caption(
+            "Naložite datoteko s seznamom parcel. Sistem jo bo analiziral in "
+            "samodejno pridobil vse izpiske iz eSodstva v zavihek za pregled lastnikov."
+        )
+
+        batch_upload = st.file_uploader(
+            "Naloži datoteko (.xlsm, .xlsx, .xls, .pdf, .png, .jpg, .jpeg)", 
+            type=["xlsm", "xlsx", "xls", "pdf", "png", "jpg", "jpeg"],
+            key="batch_uploader"
+        )
+
+        if batch_upload:
+            parcels_to_fetch = []
+
+            # 1. OBNAVA IN BRANJE EXCEL DATOTEKE (.xlsm, .xlsx, .xls)
+            if batch_upload.name.lower().endswith(('.xlsm', '.xlsx', '.xls')):
+                try:
+                    df = pd.read_excel(batch_upload, engine='openpyxl') 
+                    st.markdown("**Predogled prebranih stolpcev:**")
+                    st.dataframe(df.head(3))
+
+                    st.markdown("**1. Povežite stolpce z ustreznimi podatki:**")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        ko_col = st.selectbox("Kateri stolpec vsebuje šifro Katastrske občine?", options=["-- Izberi --"] + list(df.columns))
+                    with c2:
+                        parc_col = st.selectbox("Kateri stolpec vsebuje Parcelno številko?", options=["-- Izberi --"] + list(df.columns))
+
+                    if ko_col != "-- Izberi --" and parc_col != "-- Izberi --":
+                        for _, row in df.iterrows():
+                            k_val = str(row[ko_col]).strip()
+                            p_val = str(row[parc_col]).strip()
+                            
+                            if k_val and p_val and k_val.lower() != 'nan' and p_val.lower() != 'nan':
+                                if k_val.endswith('.0'): k_val = k_val[:-2]
+                                if p_val.endswith('.0'): p_val = p_val[:-2]
+                                parcels_to_fetch.append((k_val, p_val))
+                                
+                except Exception as e:
+                    st.error(f"Napaka pri obdelavi Excel datoteke: {e}")
+
+            # 2. OBNAVA IN BRANJE PDF DATOTEKE
+            elif batch_upload.name.lower().endswith('.pdf'):
+                try:
+                    with st.spinner("Berem in prepoznavam parcele iz PDF datoteke..."):
+                        pdf_text = extract_pdf_text(batch_upload.read())
+                        detected_pairs = parse_ko_parcels_from_text(pdf_text)
                         
-                    progress_bar.progress((i + 1) / len(unique_parcels))
-                
-                status_text.success(
-                    f"✅ Serijski prenos je končan! Uspešno prenesenih in dodanih {success_count} "
-                    f"izpiskov. Rezultate si lahko pogledate v zavihku **{TAB_BULK_LABEL}**."
-                )
+                        if detected_pairs:
+                            st.success(f"V PDF datoteki sem uspel prepoznati {len(detected_pairs)} parcelnih vnosov!")
+                        else:
+                            st.warning("V PDF datoteki nisem uspel prepoznati nobenih parcel.")
+
+                        # NOVO: urejljiva tabela - dopolnite/popravite ročno, če je treba
+                        df_detected = pd.DataFrame(detected_pairs, columns=["Šifra KO", "Parcelna številka"])
+                        df_edited = st.data_editor(
+                            df_detected, num_rows="dynamic", use_container_width=True,
+                            key="batch_pdf_editor",
+                        )
+                        parcels_to_fetch = [
+                            (str(r["Šifra KO"]).strip(), str(r["Parcelna številka"]).strip())
+                            for _, r in df_edited.iterrows()
+                            if str(r["Šifra KO"]).strip() and str(r["Parcelna številka"]).strip()
+                        ]
+                except Exception as e:
+                    st.error(f"Napaka pri branju PDF datoteke: {e}")
+
+           # 3. OBNAVA IN BRANJE SLIKE (.png, .jpg, .jpeg)
+            elif batch_upload.name.lower().endswith(('.png', '.jpg', '.jpeg')):
+                try:
+                    with st.spinner("Berem in prepoznavam besedilo na sliki (OCR)..."):
+                        import pytesseract
+                        from PIL import Image, ImageOps
+
+                        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+                        
+                        img = Image.open(batch_upload)
+
+                        # NOVO: predobdelava slike izboljša prepoznavo znakov pri fotografijah
+                        # s telefona (siva lestvica, avtomatski kontrast, povečava manjših slik).
+                        proc_img = ImageOps.grayscale(img)
+                        proc_img = ImageOps.autocontrast(proc_img, cutoff=1)
+                        pw, ph = proc_img.size
+                        if max(pw, ph) < 3000:
+                            proc_img = proc_img.resize((int(pw * 1.8), int(ph * 1.8)), Image.LANCZOS)
+
+                        # KLJUČNO: dodan config='--psm 6' prisili bralnik, da ne meša stolpcev in bere strogo po vrsticah!
+                        image_text = pytesseract.image_to_string(proc_img, lang='slv+eng', config='--psm 6')
+                        
+                        # Uporabimo izboljšano funkcijo za iskanje KO in parcel
+                        detected_pairs = parse_ko_parcels_from_text(image_text)
+                        
+                        if detected_pairs:
+                            st.success(f"Na sliki sem uspel prepoznati {len(detected_pairs)} parcelnih vnosov!")
+                        else:
+                            st.warning("Na sliki nisem uspel prepoznati nobenih parcel. Poskusite s sliko v višji ločljivosti in preverite, da so podatki čitljivi.")
+
+                        # NOVO: tabela je zdaj UREJLJIVA - OCR ni nikoli 100% zanesljiv (npr. zabrisane
+                        # ali obledele vrstice), zato lahko tukaj ročno popravite/dodate/izbrišete vrstico,
+                        # preden zaženete prenos. Primerjajte s sliko in dopolnite manjkajoče vnose.
+                        df_detected = pd.DataFrame(detected_pairs, columns=["Šifra KO", "Parcelna številka"])
+                        df_edited = st.data_editor(
+                            df_detected, num_rows="dynamic", use_container_width=True,
+                            key="batch_image_editor",
+                        )
+                        parcels_to_fetch = [
+                            (str(r["Šifra KO"]).strip(), str(r["Parcelna številka"]).strip())
+                            for _, r in df_edited.iterrows()
+                            if str(r["Šifra KO"]).strip() and str(r["Parcelna številka"]).strip()
+                        ]
+                except ImportError:
+                    st.error("Za branje iz slike manjkata knjižnici `pytesseract` in `Pillow`. Namestite ju preko terminala s: `pip install pytesseract pillow`.")
+                except pytesseract.TesseractNotFoundError:
+                    st.error("Na sistemu ni nameščen Tesseract OCR. Namestite ga na sistem preden poskusite prebrati sliko.")
+                except Exception as e:
+                    st.error(f"Napaka pri branju slike: {e}")
+
+            # ZAGON MASOVNEGA PRENOSA V ZEMLJIŠKI KNJIGI
+            if parcels_to_fetch:
+                unique_parcels = list(dict.fromkeys(parcels_to_fetch))
+
+                st.markdown("**2. Potrditev:**")
+                if st.button(f"▶️ ZAŽENI PRENOS ZA {len(unique_parcels)} PARCEL", type="primary", use_container_width=True):
+                    progress_bar = st.progress(0.0)
+                    status_text = st.empty()
+                    success_count = 0
+                    
+                    for i, (k_val, p_val) in enumerate(unique_parcels):
+                        status_text.text(f"Prenašam ({i+1}/{len(unique_parcels)}): KO {k_val}, Parc. št. {p_val} ...")
+                        try:
+                            pdf_bytes = cached_fetch_ezk_pdf(
+                                _state=st.session_state.ezk_storage_state,
+                                katastrska_obcina=k_val,
+                                parcelna_stevilka=p_val,
+                                headless=not st.session_state.ezk_debug_mode,
+                            )
+                            
+                            file_name = f"ezk_{k_val}_{p_val}.pdf"
+                            file_name = _safe_filename_part(file_name.replace(".pdf", "")) + ".pdf"
+                            file_id = f"{file_name}_{len(pdf_bytes)}"
+                            
+                            existing_ids = {r["file_id"] for r in st.session_state.bulk_pdf_records}
+                            
+                            if file_id not in existing_ids:
+                                if len(st.session_state.bulk_pdf_records) < MAX_BULK_PDFS:
+                                    st.session_state.bulk_pdf_records.append(
+                                        {"file_id": file_id, "name": file_name, "text": extract_pdf_text(pdf_bytes)}
+                                    )
+                                    success_count += 1
+                                else:
+                                    st.warning(f"Dosežen je maksimum {MAX_BULK_PDFS} hkrati naloženih izpiskov!")
+                                    break
+                        except Exception as e:
+                            st.error(f"Napaka pri prenosu (KO: {k_val}, Parc: {p_val}): {e}")
+                            
+                        progress_bar.progress((i + 1) / len(unique_parcels))
+                    
+                    status_text.success(
+                        f"✅ Serijski prenos je končan! Uspešno prenesenih in dodanih {success_count} "
+                        f"izpiskov. Rezultate si lahko pogledate v zavihku **{TAB_BULK_LABEL}**."
+                    )
 
 with tab_projekt:
     st.subheader("🏗️ Podatki o projektu (gradnji)")
