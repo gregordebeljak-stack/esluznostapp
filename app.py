@@ -439,6 +439,7 @@ st.markdown(
         min-width: unset;
     }
     .em-logo {
+        display: none !important;
         position: fixed !important;
         top: 40px;
         right: 32px;
