@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  e-sluznostimb:
+    build: .
+    container_name: e-sluznostimb
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      # Neobvezno: obdrži shranjene API profile / nastavitve med ponovnimi zagoni
+      - ./data/saved_api_profiles.json:/app/saved_api_profiles.json

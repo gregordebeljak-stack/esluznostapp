@@ -556,6 +556,20 @@ if not st.session_state.ezk_logged_in:
             "🔑 Prijava preko SI-PASS (Kvalificirano potrdilo)", use_container_width=True, type="primary",
             key="sipass_login_btn",
         )
+        # --- NOVO: Gumb za nadaljevanje brez prijave ---
+        skip_login_clicked = st.button(
+            "Nadaljuj brez prijave (samo za ročno delo s PDF in Word)", 
+            use_container_width=True, 
+            type="secondary",
+            key="skip_login_btn"
+        )
+        
+        if skip_login_clicked:
+            st.session_state.ezk_logged_in = True
+            st.session_state.ezk_username = "Gost (brez prijave)"
+            st.session_state.ezk_storage_state = None
+            st.rerun()
+        # -----------------------------------------------
         components.html(
             """
             <script>
